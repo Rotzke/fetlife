@@ -1,184 +1,199 @@
-#!/usr/bin/python3.5
+#!/usr/bin/env python3
 """Parsing members data from current URL on FetLife website."""
+# Looks like shit (sorry, this was written long time ago) but it works at least.
+import os
 import csv
 import sys
 import logging
 from time import sleep
 
-import requests
-import clipboard
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from lxml import html  # Fuck BeautifulSoup
 
 logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s',
                     level=logging.INFO)
 
+options = webdriver.ChromeOptions()
+options.add_argument("headless")
 
-def soup_filter(html, tag=None, _class=None, multiple=True):
-    """Beautifulsoup filtering function."""
-    if tag is None:
-        return BeautifulSoup(html, 'html.parser')
-    elif multiple:
-        return BeautifulSoup(html, 'html.parser').findAll(tag, _class)
-    elif not multiple:
-        return BeautifulSoup(html, 'html.parser').find(tag, _class)
+# Put your path to chromedriver here, download from: https://chromedriver.chromium.org/downloads
+# Version should match your local Google Chrome instance
+driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+
+URL = 'https://fetlife.com'
+USERNAME = ''  # changeme
+PASSWORD = ''  # changeme
+SEX = 'F'  # changeme
 
 
-def write_data(url, session, headers, cookies):
+def write_data(url, drivery):
     """Write user info into CSV file."""
     data = {}
-    raw_user = session.get(url, headers=headers, cookies=cookies)
-    user_soup = soup_filter(raw_user.text)
+    drivery.get(url)
+    sleep(3)
+    tree = html.fromstring(drivery.page_source.encode())
+
     data['Link to profile'] = url
-    data['Name'] = user_soup.find('img', {'class': 'pan'})['alt']
-    data['Age'] = user_soup.find('span',
-                                 {'class':
-                                  'small quiet'}).text.split(' ')[0][0:2]
     try:
-        data['Role'] = user_soup.find('span',
-                                      {'class':
-                                       'small quiet'}).text.split(' ')[1]
-    except AttributeError:
-        data['Role'] = ''
+        data['Name'] = tree.xpath("string(//img[contains(@class, 'db ipp w-100')]/@alt)")
+    except Exception as error:
+        logging.warning(error)
+        data['Name'] = 'N/A'
     try:
-        data['Location'] = user_soup.find('div',
-                                          {'class':
-                                           'span-13 append-1'}).p.text
-    except AttributeError:
-        data['Location'] = ''
+        data['Age'] = tree.xpath("string(//*[contains(@class, 'dib us-none')])").split(' ')[0][0:2]
+    except Exception as error:
+        logging.warning(error)
+        data['Age'] = 'N/A'
     try:
-        data['D/s Relationship Status'] =\
-            user_soup.find(text='relationship status:'
-                           ).parent.parent.ul.text.strip().replace('\n', ', ')
-    except AttributeError:
-        data['D/s Relationship Status'] = ''
+        data['Role'] = tree.xpath("string(//*[contains(@class, 'dib us-none')])").split(' ')[1]
+    except Exception as error:
+        logging.warning(error)
+        data['Role'] = 'N/A'
     try:
-        data['Relationship Status'] =\
-            user_soup.find(text='D/s relationship status:'
-                           ).parent.parent.ul.text.strip().replace('\n', ', ')
-    except AttributeError:
-        data['Relationship Status'] = ''
+        data['Location'] = ', '.join([i for i in tree.xpath("//*[contains(@class, 'mt0-s mt3 tl')]//p//text()")])
+    except Exception as error:
+        logging.warning(error)
+        data['Location'] = 'N/A'
     try:
-        data['Orientation'] =\
-            user_soup.find(text='orientation:'
-                           ).parent.parent.td.text
-    except AttributeError:
-        data['Orientation'] = ''
+        d_s_first = [i.strip() for i in tree.xpath(
+            "//*[text()='D/s Relationships']/following-sibling::div//div/text()")]
+        d_s_last = [i.strip() for i in tree.xpath(
+            "//*[text()='D/s Relationships']/following-sibling::div//span//text()")]
+        data['D/s Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+    except Exception as error:
+        logging.warning(error)
+        data['D/s Relationship Status'] = 'N/A'
     try:
-        data['Active'] =\
-            user_soup.find(text='active:'
-                           ).parent.parent.td.text
-    except AttributeError:
-        data['Active'] = ''
+        d_s_first = [i.strip() for i in tree.xpath(
+            "//*[text()='Relationships']/following-sibling::div//div/text()")]
+        d_s_last = [i.strip() for i in tree.xpath(
+            "//*[text()='Relationships']/following-sibling::div//span//text()")]
+        data['Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+    except Exception as error:
+        logging.warning(error)
+        data['Relationship Status'] = 'N/A'
     try:
-        data['Is Looking For'] =\
-            ('\n').join([i for i in user_soup.find(text='is looking for:'
-                                                   ).parent.parent.td.contents
-                         if isinstance(i, str)])
-    except AttributeError:
-        data['Is Looking For'] = ''
+        data['Orientation'] = '; '.join([i.xpath("string(.)")
+                                         for i in
+                                         tree.xpath("//*[text()='Orientation']//following-sibling::div")])
+    except Exception as error:
+        logging.warning(error)
+        data['Orientation'] = 'N/A'
     try:
-        data['Groups member of'] =\
-            ('\n').join([i.a.text for i in
-                         user_soup.find(text='Groups member of'
-                                        ).find_next('ul',
-                                                    {'class':
-                                                     'list'}).contents])
-    except AttributeError:
-        data['Groups member of'] = ''
+        data['Active'] = '; '.join([i.xpath("string(.)")
+                                    for i in
+                                    tree.xpath("//*[text()='Active']//following-sibling::div")])
+    except Exception as error:
+        logging.warning(error)
+        data['Active'] = 'N/A'
     try:
-        data['About me'] = ''
-        for tag in user_soup.find('h3',
-                                  {'class':
-                                   'bottom'}, text='About me '
-                                  ).next_siblings:
-            if tag.name == "h3":
-                break
-            else:
-                try:
-                    data['About me'] += tag.string
-                except TypeError:
-                    continue
-    except AttributeError:
-        data['About me'] = ''
+        data['Is Looking For'] = '; '.join([i.xpath("string(.)")
+                                            for i in
+                                            tree.xpath("//*[text()='Looking for']/following-sibling::div//div")])
+    except Exception as error:
+        logging.warning(error)
+        data['Is Looking For'] = 'N/A'
     try:
-        data['Fetishes'] = ''
-        for tag in user_soup.find('h3',
-                                  {'class':
-                                   'bottom'}, text='Fetishes'
-                                  ).next_siblings:
-            if tag.name == "h3":
-                break
-            else:
-                try:
-                    data['Fetishes'] += tag.text
-                except (TypeError, AttributeError):
-                    continue
-    except AttributeError:
-        data['Fetishes'] = ''
+        data['Groups member of'] = '; '.join([i.xpath("./text()")[0].strip() for i in
+                                              tree.xpath("//ul[contains(@class, 'list bb b-gray-800')]//li/a")])
+    except Exception as error:
+        logging.warning(error)
+        data['Groups member of'] = 'N/A'
+    try:
+        data['About me'] = tree.xpath("string(//h2[text()='About ']/following-sibling::div)")
+    except Exception as error:
+        logging.warning(error)
+        data['About me'] = 'N/A'
+    try:
+        data['Fetishes'] = tree.xpath("string(//h2[text()='Fetishes ']/following-sibling::div)")
+    except Exception as error:
+        logging.warning(error)
+        data['Fetishes'] = 'N/A'
     return data
 
 
-def start_session(link):
+def start_session(link, driver, first_time=False):
     """Looped main script function."""
-    logging.info('Parser initialization...OK')
-    URL = 'https://fetlife.com'
-    session = requests.Session()
-    headers = {'User-Agent': """Mozilla/5.0 (X11; Linux x86_64) """
-               """AppleWebKit/537.36 (KHTML, like Gecko) """
-               """Chrome/58.0.3029.110 Safari/537.36"""}
-    raw_token = session.get(
-        'https://fetlife.com/users/sign_in', headers=headers)
-    token = soup_filter(raw_token.text, tag='input',
-                        _class={'name': 'authenticity_token'},
-                        multiple=False)['value']
-    payload = {'authenticity_token': token,
-               'user[login]': '',
-               'user[password]': '',
-               'user[locale]': 'en',
-               'user[otp_attempt]': 'step_1',
-               'utf8': '✓'}
-    login = session.post('https://fetlife.com/users/sign_in',
-                         headers=headers,
-                         data=payload)
-    if login.status_code != 200:
-        logging.critical('Invalid credentials or website problems! Exiting...')
-    n = 1
-    with open('{}.csv'.format(('-').join(link.split('/')[3:])),
-              'w', newline='') as csvfile:
-        fieldnames = ['Link to profile', 'Name', 'Age', 'Role', 'Location',
+    # Supporting two types of links
+    if not link.endswith('members') and not link.endswith('kinksters'):
+        link = link.rstrip('/') + '/members'
+    logging.info('Parser initialization... OK')
+    # Don't remember why I did it
+    if first_time:
+        driver.get('https://fetlife.com/users/sign_in')
+        username = driver.find_element_by_id("user_login")
+        username.send_keys(USERNAME)
+        sleep(1)
+        password = driver.find_element_by_id("user_password")
+        password.send_keys(PASSWORD)
+        sleep(1)
+        logging.info('Login procedure started...')
+        driver.find_element_by_xpath('//button').click()
+        sleep(5)
+    f_name = '{}.csv'.format('-'.join(link.split('/')[3:]))
+    names = []
+    # I will delete it someday IDK
+    # if os.path.exists(f_name):
+    #     logging.warning('Found existing "{}" list'.format(f_name))
+    #     with open(f_name, 'r') as f:
+    #         reader = csv.DictReader(f)
+    #         for i in reader:
+    #             names.append(i['Name'])
+    with open(f_name,
+              'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ['Name', 'Link to profile', 'Age', 'Role', 'Location',
                       'D/s Relationship Status', 'Relationship Status',
                       'Orientation', 'Active', 'Is Looking For',
                       'Groups member of', 'About me', 'Fetishes']
         writer = csv.DictWriter(csvfile,
                                 fieldnames=fieldnames)
         writer.writeheader()
+        logging.info('Parsing started...')
+        n = 1
         while True:
-            page = session.get(link +
-                               '?page={}'.format(n),
-                               headers=headers, cookies=session.cookies)
-            users = soup_filter(page.text,
-                                tag='div',
-                                _class={'class':
-                                        'fl-member-card'})
-            if len(users) == 0:
-                logging.info('Parsed last page! Exiting...')
+            # Hacky hack to run new driver instance every 100 of kinksters, otherwise the instance will be overloaded and die after 200 pages
+            if n % 100 == 0:
+                # I am too lazy to do this as separate function, you can do it yourself, just updating the old code
+                logging.info("Reached another hundred")
+                driver.close()
+                driver.quit()
+                sleep(5)
+                logging.info('Parser initialization... OK')
+                driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+                driver.get('https://fetlife.com/users/sign_in')
+                username = driver.find_element_by_id("user_login")
+                username.send_keys(USERNAME)
+                sleep(1)
+                password = driver.find_element_by_id("user_password")
+                password.send_keys(PASSWORD)
+                sleep(1)
+                logging.info('Login procedure started...')
+                driver.find_element_by_xpath('//button').click()
+                sleep(5)
+            logging.info(f'Parsing page {n}')
+            driver.get(link +
+                       '?page={}'.format(n))
+            users = html.fromstring(driver.page_source
+                                    ).xpath("//div[@class='nl1 nr1 flex flex-wrap']//div[@class='w-50-ns w-100 ph1']")
+            if not users:
+                logging.warning(f"Group's final page reached")
                 break
             else:
-                logging.info('Parsing page {}\n'.format(n))
+                n += 1
             for i in users:
-                sex = i.find('span', {'class': 'fl-member-card__info'})
-                iff = sex.text.strip().split('\n')[0]
-                if len(iff) == 3 and iff.endswith('F'):
-                    logging.info('Found {}!'.format(sex.parent.a.text))
+                name = i.xpath("string(.//a[@class='link f5 fw7 secondary mr1'])")
+                if name in names:
+                    logging.info('{} is already enlisted!'.format(name))
+                    continue
+                sex = i.xpath("string(.//span[@class='f6 fw7 gray-300'])")
+                iff = sex.strip().split('\n')[0].split(' ')[0]
+                if len(iff) == 3 and iff.endswith(SEX):
+                    logging.info('Found {}'.format(name))
+                    logging.info(URL + i.xpath("string(.//a[@class='link f5 fw7 secondary mr1']/@href)"))
+                    sleep(1)
                     writer.writerow(write_data(URL +
-                                               i.find('a',
-                                                      {'class':
-                                                       'fl-member-card__user'
-                                                       })['href'],
-                                               session,
-                                               headers,
-                                               session.cookies))
-            n += 1
+                                               i.xpath("string(.//a[@class='link f5 fw7 secondary mr1']/@href)"), driver
+                                               ))
 
 
 def print_menu():
@@ -190,6 +205,7 @@ def print_menu():
 
 
 if __name__ == '__main__':
+    first_time = True
     while True:
         print()
         print_menu()
@@ -197,20 +213,15 @@ if __name__ == '__main__':
         if choice == '1':
             try:
                 print()
-                input('Copy URL and press any key...')
-                if clipboard.paste().startswith(('https://', 'http://')):
-                    print()
-                    start_session(clipboard.paste())
-                    break
-                else:
-                    logging.warning("""Invalid URL provided - """
-                                    """it has to start with http(s)!""")
-                    sleep(2)
+                start_session(input('Paste URL and press "Enter":\n'), driver, first_time)
+                first_time = False
             except Exception as e:
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 logging.critical('{} on line {}'.format(
                     e, str(exc_tb.tb_lineno)))
                 input('Press any key to exit...')
+                driver.close()
                 exit(1)
         elif choice == '2':
+            driver.close()
             exit(0)
