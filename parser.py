@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Parsing members data from current URL on FetLife website."""
+"""Parsing members data from current URL on FetLife website.
+   Was written many years ago so don't be harsh on it.
+   Been constantly updated while people still use it."""
 import os
 import csv
 import sys
@@ -25,7 +27,10 @@ SEX = 'F'
 def login_procedure():
     """Get a new driver instance or simply log in."""
     logging.info('Parser initialization...OK')
-    driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+    # Expects chromedriver.exe file in the script directory
+    # Check: https://chromedriver.chromium.org/downloads
+    # Should match the local Chrome version
+    driver = webdriver.Chrome('chromedriver.exe', options=options)
     driver.get('https://fetlife.com/users/sign_in')
     username = driver.find_element_by_id("user_login")
     username.send_keys(USERNAME)
@@ -128,7 +133,6 @@ def write_data(url, drivery):
         data['Fetishes'] = 'N/A'
     return data
 
-
 def start_session(link, driver, first_time=False):
     """Looped main script function."""
     if not link.endswith('members') and not link.endswith('kinksters'):
@@ -155,11 +159,12 @@ def start_session(link, driver, first_time=False):
                 driver.quit()
                 driver = login_procedure()
                 logging.info('Parser initialization...OK')
-                
+
             logging.info(f'Parsing page {n}')
             driver.get(link +
                        '?page={}'.format(n))
-            users = html.fromstring(driver.page_source).xpath("//div[@class='nl1 nr1 flex flex-wrap']//div[@class='w-50-ns w-100 ph1']")
+            users = html.fromstring(driver.page_source).xpath(
+                "//div[@class='nl1 nr1 flex flex-wrap']//div[@class='w-50-ns w-100 ph1']")
             if not users:
                 logging.warning(f"Group's final page reached")
                 break
@@ -177,7 +182,8 @@ def start_session(link, driver, first_time=False):
                     logging.info(URL + i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"))
                     sleep(1)
                     writer.writerow(write_data(URL +
-                                               i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"), driver
+                                               i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"),
+                                               driver
                                                ))
 
 
