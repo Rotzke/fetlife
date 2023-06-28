@@ -8,6 +8,8 @@ import logging
 from time import sleep
 
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 from lxml import html  # Fuck BeautifulSoup
 
 logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s',
@@ -18,7 +20,8 @@ options.add_argument("headless")
 
 # Put your path to chromedriver here, download from: https://chromedriver.chromium.org/downloads
 # Version should match your local Google Chrome instance
-driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+s=Service(os.path.join('modules', 'chromedriver.exe'))
+driver = webdriver.Chrome(service=s)
 
 URL = 'https://fetlife.com'
 USERNAME = ''  # changeme
@@ -121,14 +124,14 @@ def start_session(link, driver, first_time=False):
     # Don't remember why I did it
     if first_time:
         driver.get('https://fetlife.com/users/sign_in')
-        username = driver.find_element_by_id("user_login")
+        username = driver.find_element("id","user_login")
         username.send_keys(USERNAME)
         sleep(1)
-        password = driver.find_element_by_id("user_password")
+        password = driver.find_element("id","user_password")
         password.send_keys(PASSWORD)
         sleep(1)
         logging.info('Login procedure started...')
-        driver.find_element_by_xpath('//button').click()
+        driver.find_element(By.XPATH,'//button').click()
         sleep(5)
     f_name = '{}.csv'.format('-'.join(link.split('/')[3:]))
     names = []
@@ -159,16 +162,16 @@ def start_session(link, driver, first_time=False):
                 driver.quit()
                 sleep(5)
                 logging.info('Parser initialization... OK')
-                driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+                driver = webdriver.Chrome(service=s)
                 driver.get('https://fetlife.com/users/sign_in')
-                username = driver.find_element_by_id("user_login")
+                username = driver.find_element("id","user_login")
                 username.send_keys(USERNAME)
                 sleep(1)
-                password = driver.find_element_by_id("user_password")
+                password = driver.find_element("id","user_password")
                 password.send_keys(PASSWORD)
                 sleep(1)
                 logging.info('Login procedure started...')
-                driver.find_element_by_xpath('//button').click()
+                driver.find_element(By.XPATH,'//button').click()
                 sleep(5)
             logging.info(f'Parsing page {n}')
             driver.get(link +
