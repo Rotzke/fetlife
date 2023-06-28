@@ -18,6 +18,10 @@ driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=o
 
 URL = 'https://fetlife.com'
 
+# Configs
+USERNAME = ''
+PASSWORD = ''
+SEX = 'F'
 
 def write_data(url, drivery):
     """Write user info into CSV file."""
@@ -118,22 +122,16 @@ def start_session(link, driver, first_time=False):
     if first_time:
         driver.get('https://fetlife.com/users/sign_in')
         username = driver.find_element_by_id("user_login")
-        username.send_keys('CHANGEME')
+        username.send_keys(USERNAME)
         sleep(1)
         password = driver.find_element_by_id("user_password")
-        password.send_keys('CHANGEME')
+        password.send_keys(PASSWORD)
         sleep(1)
         logging.info('Login procedure started...')
         driver.find_element_by_xpath('//button').click()
         sleep(5)
     f_name = '{}.csv'.format('-'.join(link.split('/')[3:]))
     names = []
-    # if os.path.exists(f_name):
-    #     logging.warning('Found existing "{}" list'.format(f_name))
-    #     with open(f_name, 'r') as f:
-    #         reader = csv.DictReader(f)
-    #         for i in reader:
-    #             names.append(i['Name'])
     with open(f_name,
               'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['Name', 'Link to profile', 'Age', 'Role', 'Location',
@@ -155,10 +153,10 @@ def start_session(link, driver, first_time=False):
                 driver = webdriver.Chrome(os.path.join('modules', 'chromedriver'), options=options)
                 driver.get('https://fetlife.com/users/sign_in')
                 username = driver.find_element_by_id("user_login")
-                username.send_keys('CHANGEME')
+                username.send_keys(USERNAME)
                 sleep(1)
                 password = driver.find_element_by_id("user_password")
-                password.send_keys('CHANGEME')
+                password.send_keys(PASSWORD)
                 sleep(1)
                 logging.info('Login procedure started...')
                 driver.find_element_by_xpath('//button').click()
@@ -179,7 +177,7 @@ def start_session(link, driver, first_time=False):
                     continue
                 sex = i.xpath("string(.//span[@class='f6 font-bold gray-300'])")
                 iff = sex.strip().split('\n')[0].split(' ')[0]
-                if len(iff) == 3 and iff.endswith('F'):
+                if len(iff) == 3 and iff.endswith(SEX):
                     logging.info('Found {}'.format(name))
                     logging.info(URL + i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"))
                     sleep(1)
