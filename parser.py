@@ -14,7 +14,6 @@ logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s',
 
 options = webdriver.ChromeOptions()
 options.add_argument("headless")
-driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
 
 URL = 'https://fetlife.com'
 
@@ -22,6 +21,22 @@ URL = 'https://fetlife.com'
 USERNAME = ''
 PASSWORD = ''
 SEX = 'F'
+
+def login_procedure():
+    """Get a new driver instance or simply log in."""
+    logging.info('Parser initialization...OK')
+    driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+    driver.get('https://fetlife.com/users/sign_in')
+    username = driver.find_element_by_id("user_login")
+    username.send_keys(USERNAME)
+    sleep(1)
+    password = driver.find_element_by_id("user_password")
+    password.send_keys(PASSWORD)
+    sleep(1)
+    logging.info('Login procedure started...')
+    driver.find_element_by_xpath('//button').click()
+    sleep(5)
+    return driver
 
 def write_data(url, drivery):
     """Write user info into CSV file."""
@@ -118,18 +133,8 @@ def start_session(link, driver, first_time=False):
     """Looped main script function."""
     if not link.endswith('members') and not link.endswith('kinksters'):
         link = link.rstrip('/') + '/members'
-    logging.info('Parser initialization...OK')
     if first_time:
-        driver.get('https://fetlife.com/users/sign_in')
-        username = driver.find_element_by_id("user_login")
-        username.send_keys(USERNAME)
-        sleep(1)
-        password = driver.find_element_by_id("user_password")
-        password.send_keys(PASSWORD)
-        sleep(1)
-        logging.info('Login procedure started...')
-        driver.find_element_by_xpath('//button').click()
-        sleep(5)
+        driver = login_procedure()
     f_name = '{}.csv'.format('-'.join(link.split('/')[3:]))
     names = []
     with open(f_name,
@@ -148,19 +153,9 @@ def start_session(link, driver, first_time=False):
                 logging.info("Reached another hundred")
                 driver.close()
                 driver.quit()
-                sleep(5)
+                driver = login_procedure()
                 logging.info('Parser initialization...OK')
-                driver = webdriver.Chrome(os.path.join('modules', 'chromedriver'), options=options)
-                driver.get('https://fetlife.com/users/sign_in')
-                username = driver.find_element_by_id("user_login")
-                username.send_keys(USERNAME)
-                sleep(1)
-                password = driver.find_element_by_id("user_password")
-                password.send_keys(PASSWORD)
-                sleep(1)
-                logging.info('Login procedure started...')
-                driver.find_element_by_xpath('//button').click()
-                sleep(5)
+                
             logging.info(f'Parsing page {n}')
             driver.get(link +
                        '?page={}'.format(n))
@@ -186,32 +181,17 @@ def start_session(link, driver, first_time=False):
                                                ))
 
 
-def print_menu():
-    """Print user menu."""
-    print(30 * "-", "MENU", 30 * "-")
-    print("1. Generate members list")
-    print("2. Exit")
-    print(66 * "-")
-
-
 if __name__ == '__main__':
     first_time = True
     while True:
-        print()
-        print_menu()
-        choice = input("Enter your choice [1-2]: ")
-        if choice == '1':
-            try:
-                print()
-                start_session(input('Paste URL and press "Enter":\n'), driver, first_time)
-                first_time = False
-            except Exception as e:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                logging.critical('{} on line {}'.format(
-                    e, str(exc_tb.tb_lineno)))
-                input('Press any key to exit...')
-                driver.close()
-                exit(1)
-        elif choice == '2':
+        try:
+            start_session(input('Paste URL and press "Enter":\n'), driver, first_time)
+            first_time = False
+        except Exception as e:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            logging.critical('{} on line {}'.format(
+                e, str(exc_tb.tb_lineno)))
+            input('Press any key to exit...')
             driver.close()
-            exit(0)
+            driver.quit()
+            exit(1)
