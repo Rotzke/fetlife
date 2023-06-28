@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Parsing members data from current URL on FetLife website."""
-# Looks like shit (sorry, this was written long time ago) but it works at least.
 import os
 import csv
 import sys
@@ -8,22 +7,16 @@ import logging
 from time import sleep
 
 from selenium import webdriver
-from lxml import html  # Fuck BeautifulSoup
+from lxml import html
 
 logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s',
                     level=logging.INFO)
 
 options = webdriver.ChromeOptions()
 options.add_argument("headless")
-
-# Put your path to chromedriver here, download from: https://chromedriver.chromium.org/downloads
-# Version should match your local Google Chrome instance
 driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
 
 URL = 'https://fetlife.com'
-USERNAME = ''  # changeme
-PASSWORD = ''  # changeme
-SEX = 'F'  # changeme
 
 
 def write_data(url, drivery):
@@ -59,16 +52,21 @@ def write_data(url, drivery):
             "//*[text()='D/s Relationships']/following-sibling::div//div/text()")]
         d_s_last = [i.strip() for i in tree.xpath(
             "//*[text()='D/s Relationships']/following-sibling::div//span//text()")]
-        data['D/s Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+        if d_s_last:
+            data['D/s Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+        else:
+            data['D/s Relationship Status'] = '; '.join(d_s_first)
     except Exception as error:
         logging.warning(error)
         data['D/s Relationship Status'] = 'N/A'
     try:
-        d_s_first = [i.strip() for i in tree.xpath(
-            "//*[text()='Relationships']/following-sibling::div//div/text()")]
+        d_s_first = [i.strip() for i in tree.xpath("//*[text()='Relationships']/following-sibling::div//div/text()")]
         d_s_last = [i.strip() for i in tree.xpath(
             "//*[text()='Relationships']/following-sibling::div//span//text()")]
-        data['Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+        if d_s_last:
+            data['Relationship Status'] = '; '.join(list(map(': '.join, list(zip(d_s_first, d_s_last)))))
+        else:
+            data['Relationship Status'] = '; '.join(d_s_first)
     except Exception as error:
         logging.warning(error)
         data['Relationship Status'] = 'N/A'
@@ -114,25 +112,22 @@ def write_data(url, drivery):
 
 def start_session(link, driver, first_time=False):
     """Looped main script function."""
-    # Supporting two types of links
     if not link.endswith('members') and not link.endswith('kinksters'):
         link = link.rstrip('/') + '/members'
-    logging.info('Parser initialization... OK')
-    # Don't remember why I did it
+    logging.info('Parser initialization...OK')
     if first_time:
         driver.get('https://fetlife.com/users/sign_in')
         username = driver.find_element_by_id("user_login")
-        username.send_keys(USERNAME)
+        username.send_keys('CHANGEME')
         sleep(1)
         password = driver.find_element_by_id("user_password")
-        password.send_keys(PASSWORD)
+        password.send_keys('CHANGEME')
         sleep(1)
         logging.info('Login procedure started...')
         driver.find_element_by_xpath('//button').click()
         sleep(5)
     f_name = '{}.csv'.format('-'.join(link.split('/')[3:]))
     names = []
-    # I will delete it someday IDK
     # if os.path.exists(f_name):
     #     logging.warning('Found existing "{}" list'.format(f_name))
     #     with open(f_name, 'r') as f:
@@ -151,21 +146,19 @@ def start_session(link, driver, first_time=False):
         logging.info('Parsing started...')
         n = 1
         while True:
-            # Hacky hack to run new driver instance every 100 of kinksters, otherwise the instance will be overloaded and die after 200 pages
             if n % 100 == 0:
-                # I am too lazy to do this as separate function, you can do it yourself, just updating the old code
                 logging.info("Reached another hundred")
                 driver.close()
                 driver.quit()
                 sleep(5)
-                logging.info('Parser initialization... OK')
-                driver = webdriver.Chrome(os.path.join('modules', 'chromedriver.exe'), options=options)
+                logging.info('Parser initialization...OK')
+                driver = webdriver.Chrome(os.path.join('modules', 'chromedriver'), options=options)
                 driver.get('https://fetlife.com/users/sign_in')
                 username = driver.find_element_by_id("user_login")
-                username.send_keys(USERNAME)
+                username.send_keys('CHANGEME')
                 sleep(1)
                 password = driver.find_element_by_id("user_password")
-                password.send_keys(PASSWORD)
+                password.send_keys('CHANGEME')
                 sleep(1)
                 logging.info('Login procedure started...')
                 driver.find_element_by_xpath('//button').click()
@@ -173,26 +166,25 @@ def start_session(link, driver, first_time=False):
             logging.info(f'Parsing page {n}')
             driver.get(link +
                        '?page={}'.format(n))
-            users = html.fromstring(driver.page_source
-                                    ).xpath("//div[@class='nl1 nr1 flex flex-wrap']//div[@class='w-50-ns w-100 ph1']")
+            users = html.fromstring(driver.page_source).xpath("//div[@class='nl1 nr1 flex flex-wrap']//div[@class='w-50-ns w-100 ph1']")
             if not users:
                 logging.warning(f"Group's final page reached")
                 break
             else:
                 n += 1
             for i in users:
-                name = i.xpath("string(.//a[@class='link f5 fw7 secondary mr1'])")
+                name = i.xpath("string(.//a[@class='link f5 font-bold secondary mr1'])")
                 if name in names:
                     logging.info('{} is already enlisted!'.format(name))
                     continue
-                sex = i.xpath("string(.//span[@class='f6 fw7 gray-300'])")
+                sex = i.xpath("string(.//span[@class='f6 font-bold gray-300'])")
                 iff = sex.strip().split('\n')[0].split(' ')[0]
-                if len(iff) == 3 and iff.endswith(SEX):
+                if len(iff) == 3 and iff.endswith('F'):
                     logging.info('Found {}'.format(name))
-                    logging.info(URL + i.xpath("string(.//a[@class='link f5 fw7 secondary mr1']/@href)"))
+                    logging.info(URL + i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"))
                     sleep(1)
                     writer.writerow(write_data(URL +
-                                               i.xpath("string(.//a[@class='link f5 fw7 secondary mr1']/@href)"), driver
+                                               i.xpath("string(.//a[@class='link f5 font-bold secondary mr1']/@href)"), driver
                                                ))
 
 
